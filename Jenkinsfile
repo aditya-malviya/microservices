@@ -3,7 +3,7 @@ import groovy.transform.Field
 import groovy.json.JsonSlurper
 
 
-node ('JenkinsSlave_UI')
+node ('Build-Server')
 {
     parameters
     {
@@ -17,8 +17,8 @@ node ('JenkinsSlave_UI')
             Checkout()
             Build()
             Create_Image()
-            image push()
-			Deploytok8s()
+            image_Push()
+	    Deploytok8s()
         }
    
 
@@ -50,16 +50,16 @@ def Build()
     stage('Build') 
     {
        sh 'cd authutil; mvn clean install'
-       sh "cd ${params.Service_Name} ; mvn clean package -Dmaven.test.skip=true" 
+       sh "cd service-70900 ; mvn clean package -Dmaven.test.skip=true" 
     }
 }
 def Create_Image()
 {
     stage('Create_Image')
-    withCredentials([usernamePassword(credentialsId: 'nexus_prod', usernameVariable: 'NEXUS_USER' , passwordVariable: 'NEXUS_PASSWORD' )]) 
+     
     {
-        sh "sudo docker login -u ${NEXUS_USER} -p ${NEXUS_PASSWORD} $env.dev_nexus_ip"
-        sh "cd $WORKSPACE/${params.Service_Name} ; sudo docker build --tag=${params.Service_Name} ."
+        sh "sudo docker login -u ankit1111 -pmiet@12345 "
+        sh "cd $WORKSPACE/service-70900 ; sudo docker build --tag=service-70900 ."
     }
 }
 
@@ -68,9 +68,9 @@ def Image_Push()
     stage('Image_Push')
     {
    // 
-            sh "sudo docker login -u ankit1111 -p miet@1234 "
-            sh "sudo docker tag  service-70900 $env.dev_nexus_ip/service-70900"
-            sh "sudo docker push $env.dev_nexus_ip/$params.Service_Name:latest"
+            sh "sudo docker login -u ankit1111 -p miet@12345 "
+            sh "sudo docker tag  service-70900 ankit1111/service-70900"
+            sh "sudo docker push ankit1111/service-70900:latest"
         }
     }
 }
@@ -79,9 +79,9 @@ def Deploytok8s()
 {
     stage('DeploytoProd')
     {
-      node ("ansible-slave01")
+      node ("k8-master")
       {
-            sh "cd /opt/; ansible-playbook ms.yml "
+            sh "cd //home/ubuntu/k8s; ansible-playbook msjava.yaml "
       }
 
     }
