@@ -67,13 +67,13 @@ def Image_Push()
 {
     stage('Image_Push')
     {
-   // 
+   
             sh "sudo docker login -u ankit1111 -p miet@12345 "
             sh "sudo docker tag  service-70900 ankit1111/service-70900"
             sh "sudo docker push ankit1111/service-70900:latest"
         }
     }
-}
+
 
 def Deploytok8s()
 {
