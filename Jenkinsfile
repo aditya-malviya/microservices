@@ -81,7 +81,7 @@ def Deploytok8s()
     {
       node ("k8-master")
       {
-            sh "cd //home/ubuntu/k8s; ansible-playbook msjava.yaml "
+            sh "cd /home/ubuntu/k8s; ansible-playbook msjava.yaml "
       }
 
     }
