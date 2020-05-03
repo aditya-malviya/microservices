@@ -17,7 +17,7 @@ node ('Build-Server')
             Checkout()
             Build()
             Create_Image()
-            image_Push()
+            Image_Push()
 	    Deploytok8s()
         }
    
