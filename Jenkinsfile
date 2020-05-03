@@ -49,7 +49,7 @@ def Build()
 {
     stage('Build') 
     {
-       sh 'cd authutil; mvn clean install'
+       //sh 'cd authutil; mvn clean install'
        sh "cd service-70900 ; mvn clean package -Dmaven.test.skip=true" 
     }
 }
