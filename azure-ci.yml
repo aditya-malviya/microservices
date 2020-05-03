@@ -1,0 +1,238 @@
+trigger: none
+
+resources:
+- repo: self
+
+variables:
+
+  # Container registry service connection established during pipeline creation
+  #imagename: demoshubham
+  registryConnection: nexusrepodev
+  dockerfilePath: 'Dockerfile'
+  tag: 'latest'
+   
+   
+  
+  
+stages:
+- stage: Build_Springboot
+##### SpringBoot Build Stage ####
+  displayName: Build
+  jobs:  
+  - job: Build_Springboot
+    displayName: Build_Springboot
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'springboot')
+    steps:
+    - script : |
+        cd $(Service_Name) 
+        mvn clean install
+    - script: |
+        cd $(Service_Name)
+        echo "mvn test"
+      displayName: SpringBoot_Test
+ 
+  - job: Build_Dotnet
+    displayName: Build_Dotnet
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'dotnet')
+    steps:
+    - script: |
+        cd $(Service_Name) 
+        dotnet publish -c release -r linux-x64 --self-contained -o dll
+    - script: |
+        cd $(Service_Name)
+        echo "Dotnet test"
+      displayName: Dotnet_Test
+
+  - job: Build
+    displayName: Build_Node_OR_Python
+    pool: $(BuildPoolName)
+    condition: in(variables['Language'], 'node','python')
+    steps:
+    - script:
+        echo "Python & Node Build"
+        echo $(Build.RequestedForEmail)
+
+### Sonar Scan
+- stage: Sonar
+  jobs:
+  - job:
+    condition: eq(variables['Language'], 'springboot')
+    pool: $(BuildPoolName)
+    steps:
+      - checkout: none
+      - task: SonarQubePrepare@4
+        inputs:
+          SonarQube: 'sonar'
+          scannerMode: 'CLI'
+          configMode: 'manual'
+          cliProjectKey: '$(Service_Name)'
+          cliProjectName: '$(Service_Name)'
+          cliSources: '$(Pipeline.Workspace)/'
+          extraProperties: 'sonar.language=java
+          sonar.java.binaries=target/classes'
+
+  - job:
+    pool: $(BuildPoolName)
+    steps:
+      - checkout: none
+      - task: SonarQubePrepare@4
+        inputs:
+          SonarQube: 'sonar'
+          scannerMode: 'CLI'
+          configMode: 'manual'
+          cliProjectKey: '$(Service_Name)'
+          cliProjectName: '$(Service_Name)'
+          cliSources: '$(Pipeline.Workspace)/'
+
+# Snyk Test
+- stage: Snyk_Test
+  displayName: Snyk
+  jobs:
+  - job: Snyk_Scan_Springboot
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'springboot')
+    steps:
+    - checkout: none
+    - script: |
+        cd $(Service_Name)
+        mvn install
+        snyk test
+
+  - job: Snyk_Scan_Dotnet
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'dotnet')
+    steps:
+    - checkout: none
+    - script: |
+        cd $(Service_Name)
+        dotnet restore
+        snyk test
+
+  - job: Snyk_Scan_Nodejs
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'node')
+    steps:
+    - checkout: none
+    - script: |
+        cd $(Service_Name)
+        npm install
+        snyk test
+
+  - job: Snyk_Scan_Python
+    pool: $(BuildPoolName)
+    condition: eq(variables['Language'], 'python')
+    steps:
+    - checkout: none
+    - script: |
+        cd $(Service_Name)
+        pip install -r requirements.txt
+        snyk test
+
+
+#### Fortify Scanning
+#- stage: Fortify
+#  displayName: Fortify_Scan
+#  jobs: 
+#  - job: Fortify_Scaning
+#    pool: $(BuildPoolName)
+#    steps: 
+#    - checkout: none
+#    - script: |
+#        /opt/HPE_Security/Fortify_SCA_and_Apps_17.20/bin/sourceanalyzer -b test -clean
+#        /opt/HPE_Security/Fortify_SCA_and_Apps_17.20/bin/sourceanalyzer -b test $(Pipeline.Workspace)/s/$(Service_Name)
+#        /opt/HPE_Security/Fortify_SCA_and_Apps_17.20/bin/sourceanalyzer -b test -export-build-session file.mbs
+#        /opt/HPE_Security/Fortify_SCA_and_Apps_17.20/bin/cloudscan -sscurl https://entssc.ril.com/ssc -ssctoken 94724cf3-01b9-4e37-bf24-5760519c4d70 - start -upload -versionid 10998 -uptoken 8895f7e0-ddb7-49c5-beee-723d1d239761 -b test -scan -autoheap -build-label Xmx2G -build-project CPRfabricTesting -build-version 01
+
+- stage: Docker_Build
+  displayName: Build_Docker_Image
+  jobs:
+  - job: Build_Docker_Image
+    pool: $(BuildPoolName)
+    steps:
+    - checkout: none
+    - script: |
+        cd $(Service_Name)
+        sudo docker build --tag=10.21.193.90:8084/$(Application_Name)-$(Service_Name) .
+
+## Contaienr Security
+- stage:
+  displayName: Container_Security
+  jobs:
+  - job:
+    pool: $(BuildPoolName)
+    steps: 
+    - checkout: none
+    - script: |
+        docker run -v /var/run/docker.sock:/var/run/docker.sock deepsecurity/smartcheck-scan-action --image-name 10.21.193.90:8084/$(Application_Name)-$(Service_Name) --smartcheck-host="10.131.54.75" --smartcheck-user="Platform" --smartcheck-password=$(smartcheckp) --insecure-skip-tls-verify --insecure-skip-registry-tls-verify --preregistry-scan --preregistry-user admin --preregistry-password $(smartcheckp1) --findings-threshold '{"malware": 100, "vulnerabilities": { "defcon1": 100, "critical": 100, "high": 100 }, "contents": { "defcon1": 100, "critical": 100, "high": 100 }, "checklists": { "defcon1": 100, "critical": 100, "high": 100 }}'
+
+## Docker push to nexus
+- stage: Docker_Push
+  displayName: Push_Docker_Image
+  jobs:
+  - job: Push_Docker_Image
+    pool: $(BuildPoolName)
+    steps:
+    - checkout: none
+    - task: Docker@2
+      inputs:
+        command: 'push'
+        repository: $(Application_Name)-$(Service_Name)
+        containerRegistry: $(registryConnection)
+        tags: '$(tag)'
+
+
+
+#- stage: Container_Security
+#  displayName: Container_Security
+#  dependsOn: Build
+#  jobs:
+#  - job:
+#    displayName: Container_Security
+#    pool: $(BuildPoolName)
+#    steps:
+#    - script: |
+#        docker run -v /var/run/docker.sock:/var/run/docker.sock deepsecurity/smartcheck-scan-action --image-name 10.21.193.90:8084/$(imageName):latest --smartcheck-host="10.131.54.75" --smartcheck-user="Platform" --smartcheck-password="Ril@123" --insecure-skip-tls-verify --insecure-skip-registry-tls-verify --preregistry-scan --preregistry-user admin --preregistry-password ril@123 --findings-threshold '{"malware": 100, "vulnerabilities": { "defcon1": 100, "critical": 100, "high": 100 }, "contents": { "defcon1": 100, "critical": 100, "high": 100 }, "checklists": { "defcon1": 100, "critical": 100, "high": 100 }}' 
+#      displayName: Container_Security
+#    - script: | 
+#        cd /home/ubuntu
+#        docker run -v /home/ubuntu/tm_report:/root/app tshethp/dssc-vulnerability-report:v4 --smartcheck-host "10.131.54.75" --smartcheck-user Platform --smartcheck-password Ril@123 --insecure-skip-tls-verify --min-severity low 10.21.193.90:8084/$(imageName):latest
+#      displayName: "Report_Generation"
+
+
+- stage: Build_Yaml 
+  displayName: Deploy
+  #dependsOn: Container_Security
+  jobs:  
+  - job:
+    displayName: Build_Kubernetes_Yamls
+    pool: $(DeployPoolName)
+    steps:
+    - script: |
+        echo $(Build.SourceBranch)
+        cd /opt
+        ./deployment.py $(Service_Name) $(Application_Name) $(Environment_Name) $(dev_nexus_ip) $(BUILD_NUMBER) $(Language)
+
+- stage : Kubernetes_Deployment
+  displayName: Kubernetes_Deployment
+  dependsOn: Build_Yaml
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/develop')
+  jobs: 
+  - job:
+    displayName: Deploy_In_Kubernetes
+    pool: $(DeployPoolName)
+    steps:
+    - script: |
+        cd /opt
+        sudo ansible-playbook $(Application_Name)-$(Service_Name).yml --extra-vars 'variable_host=$(Environment_Name) variable_serv=$(Service_Name) variable_app=$(Application_Name)'
+
+- stage: Quality_gate
+  jobs:
+  - job:
+    pool: $(BuildPoolName)
+    steps:
+      - checkout: none
+      - script: |
+            cd /opt
+            ./sonarqualitycheck.sh $(sonarhost) $(Service_Name) $(sonartoken)
