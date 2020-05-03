@@ -81,7 +81,7 @@ def Deploytok8s()
     {
       node ("k8-master")
       {
-            sh "cd k8s; kubectl create -f  msjava.yaml "
+            sh "cd /home/ubuntu/k8s; kubectl create -f  msjava.yaml "
       }
 
     }
